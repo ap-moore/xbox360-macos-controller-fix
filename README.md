@@ -2,6 +2,16 @@
 
 Fix for using multiple wired Xbox 360 controllers simultaneously on macOS, including inverted analog-stick controls.
 
+## Build prerequisites
+
+Building the patched SDL2 library requires:
+
+- Git
+- Apple Command Line Tools (`xcode-select --install`)
+- CMake (`brew install cmake` if using Homebrew)
+
+Homebrew is only needed if CMake is not already installed.
+
 ## The problem
 
 On an Apple Silicon Mac running macOS 27, two wired Xbox 360 controllers were connected over USB, but Stardew Valley only recognized one at a time.
@@ -41,6 +51,7 @@ Clone the custom SDL repository:
 ```bash
 git clone --branch SDL2 https://github.com/TomGrimwood/SDL.git SDL-custom
 cd SDL-custom
+git checkout 4f623319d
 ```
 
 Apply the patch from this repository:
