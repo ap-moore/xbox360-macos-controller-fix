@@ -120,6 +120,21 @@ launchctl bootstrap "gui/$(id -u)" \
   "$HOME/Library/LaunchAgents/com.local.stardew-controller.plist"
 ```
 
+### How the LaunchAgent works
+
+The LaunchAgent runs `launchctl setenv SDL_JOYSTICK_MFI 0` once when you log in.
+
+- It does not install a driver or run continuously.
+- It does not require administrator privileges.
+- **Steam must launch after the LaunchAgent runs** to inherit the setting.
+- The LaunchAgent is optional. You can run the command manually instead.
+
+A ready-to-use configuration is included at
+[`launchagents/com.local.stardew-controller.plist`](launchagents/com.local.stardew-controller.plist).
+
+To install it, copy the file into `~/Library/LaunchAgents/` and load it
+using the `launchctl bootstrap` command shown above.
+
 ## Reverting the changes
 
 Restore the original SDL2 library:
