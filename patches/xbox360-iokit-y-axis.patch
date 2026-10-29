@@ -1,0 +1,39 @@
+diff --git a/src/joystick/darwin/SDL_iokitjoystick.c b/src/joystick/darwin/SDL_iokitjoystick.c
+index f6bad01f5..112701e91 100644
+--- a/src/joystick/darwin/SDL_iokitjoystick.c
++++ b/src/joystick/darwin/SDL_iokitjoystick.c
+@@ -504,6 +504,8 @@ static SDL_bool GetDeviceInfo(IOHIDDeviceRef hidDevice, recDevice *pDevice)
+     }
+ #endif
+ 
++    pDevice->vendor_id = (Uint16)vendor;
++    pDevice->product_id = (Uint16)product;
+     pDevice->guid = SDL_CreateJoystickGUID(SDL_HARDWARE_BUS_USB, (Uint16)vendor, (Uint16)product, (Uint16)version, manufacturer_string, product_string, 0, 0);
+     pDevice->steam_virtual_gamepad_slot = GetSteamVirtualGamepadSlot((Uint16)vendor, (Uint16)product, product_string);
+ 
+@@ -972,6 +974,12 @@ static void DARWIN_JoystickUpdate(SDL_Joystick *joystick)
+     while (element) {
+         goodRead = GetHIDScaledCalibratedState(device, element, -32768, 32767, &value);
+         if (goodRead) {
++            /* Correct inverted left Y-axis on wired Xbox 360 controllers. */
++            if (i == 1 &&
++                device->vendor_id == 0x045e &&
++                device->product_id == 0x028e) {
++                value = (value == -32768) ? 32767 : -value;
++            }
+             SDL_PrivateJoystickAxis(joystick, i, value);
+         }
+ 
+diff --git a/src/joystick/darwin/SDL_iokitjoystick_c.h b/src/joystick/darwin/SDL_iokitjoystick_c.h
+index 095c08322..ea9dab516 100644
+--- a/src/joystick/darwin/SDL_iokitjoystick_c.h
++++ b/src/joystick/darwin/SDL_iokitjoystick_c.h
+@@ -71,6 +71,8 @@ struct joystick_hwdata
+ 
+     int instance_id;
+     SDL_JoystickGUID guid;
++    Uint16 vendor_id;
++    Uint16 product_id;
+     int steam_virtual_gamepad_slot;
+ 
+     struct joystick_hwdata *pNext; /* next device */
