@@ -37,3 +37,16 @@ index 095c08322..ea9dab516 100644
      int steam_virtual_gamepad_slot;
  
      struct joystick_hwdata *pNext; /* next device */
+--- a/src/joystick/hidapi/SDL_hidapi_xbox360.c
++++ b/src/joystick/hidapi/SDL_hidapi_xbox360.c
+@@ -267,7 +267,9 @@
+ {
+     Sint16 axis;
+ #ifdef __MACOSX__
+-    const SDL_bool invert_y_axes = SDL_FALSE;
++    const SDL_bool invert_y_axes =
++        SDL_JoystickGetVendor(joystick) == 0x045e &&
++        SDL_JoystickGetProduct(joystick) == 0x028e;
+ #else
+     const SDL_bool invert_y_axes = SDL_TRUE;
+ #endif

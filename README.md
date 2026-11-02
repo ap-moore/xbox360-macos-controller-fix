@@ -1,195 +1,100 @@
-# Xbox 360 Controllers on macOS — SDL2 Fix
+# Wired Xbox 360 controllers on macOS — Stardew Valley SDL2 fix
 
-Fix for using multiple wired Xbox 360 controllers simultaneously on macOS, including inverted analog-stick controls.
+Fix inverted vertical-stick movement when using Microsoft wired Xbox 360 controllers in Stardew Valley on macOS. This repository provides a patch for **SDL2 2.30.4**, the library Stardew Valley uses for controller input.
 
-## Build prerequisites
+The patched library supports two controllers controlling separate players, with correct stick directions and Player 1 / Player 2 LED indicators. No SDL environment-variable configuration is required.
 
-Building the patched SDL2 library requires:
+**Tested hardware:** USB vendor ID `045e`, product ID `028e` (Microsoft wired Xbox 360 controller). Tested on an Apple Silicon Mac with the Steam version of Stardew Valley. Other hardware and games are untested.
 
+## Requirements
+
+- macOS and Apple Command Line Tools (`xcode-select --install` if needed)
 - Git
-- Apple Command Line Tools (`xcode-select --install`)
 - CMake (`brew install cmake` if using Homebrew)
+- Steam installation of Stardew Valley for macOS
+- Two Microsoft wired Xbox 360 controllers (`045e:028e`)
 
-Homebrew is only needed if CMake is not already installed.
+The instructions below build an **x86_64** SDL2 library for Stardew Valley's Intel macOS executable, which runs through Rosetta on Apple Silicon.
 
-## The problem
+## Build from source
 
-On an Apple Silicon Mac running macOS 27, two wired Xbox 360 controllers were connected over USB, but Stardew Valley only recognized one at a time.
-
-Both controllers appeared in macOS's USB device information, but the last controller connected would take precedence.
-
-## The solution
-
-Two changes were required:
-
-1. Disable SDL2's MFi backend so SDL uses IOKit.
-2. Patch SDL2's IOKit backend to correct the inverted left-stick Y-axis.
-
-Tested successfully with two wired Xbox 360 controllers in Stardew Valley.
-
-## Step 1: Enable SDL's IOKit backend
-
-Run:
+From a working directory of your choice:
 
 ```bash
-launchctl setenv SDL_JOYSTICK_MFI 0
-```
+git clone https://github.com/ap-moore/xbox360-macos-controller-fix.git
+git clone --depth 1 --branch release-2.30.4 https://github.com/libsdl-org/SDL.git SDL
+cd SDL
 
-Completely quit and restart Steam.
+git apply --check ../xbox360-macos-controller-fix/patches/xbox360-controller-fix.patch
+git apply ../xbox360-macos-controller-fix/patches/xbox360-controller-fix.patch
 
-Make sure:
-- Steam Input is disabled for Stardew Valley.
-- Steam launch options are blank.
-- No custom `SDL_GAMECONTROLLERCONFIG` mapping is active.
-
-At this point, both controllers should be detected, although vertical movement may be inverted.
-
-## Step 2: Build the patched SDL2 library
-
-Clone the custom SDL repository:
-
-```bash
-git clone --branch SDL2 https://github.com/TomGrimwood/SDL.git SDL-custom
-cd SDL-custom
-git checkout 4f623319d
-```
-
-Apply the patch from this repository:
-
-```bash
-git apply /path/to/xbox360-macos-controller-fix/patches/xbox360-iokit-y-axis.patch
-```
-
-Configure and build SDL2:
-
-```bash
 cmake -S . -B build \
   -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_OSX_ARCHITECTURES=x86_64 \
-  -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0 \
   -DSDL_SHARED=ON \
   -DSDL_STATIC=OFF \
-  -DSDL_TESTS=OFF
+  -DHAVE_FRAMEWORK_GAMECONTROLLER=FALSE
 
-cmake --build build -j 4
+cmake --build build --parallel 4
+file build/libSDL2-2.0.0.dylib
+cd ..
 ```
 
-The patch specifically targets wired Xbox 360 controllers with vendor ID `0x045e` and product ID `0x028e`.
+The output is `SDL/build/libSDL2-2.0.0.dylib`. The `file` command should report an `x86_64` library. Keep `HAVE_FRAMEWORK_GAMECONTROLLER=FALSE` to disable Apple's GameController/MFi backend; this is part of the tested configuration.
 
-## Step 3: Install in Stardew Valley
+## Install in Stardew Valley
 
-Quit Stardew Valley and Steam first.
+**Quit Stardew Valley and Steam completely first.** From the directory containing the `SDL` checkout, back up the game's original library and install the patched one. Adjust `GAME` if your Steam library is installed elsewhere.
+
+Keep the original backup when reinstalling the patch; do not overwrite it with a patched library.
 
 ```bash
 GAME="$HOME/Library/Application Support/Steam/steamapps/common/Stardew Valley/Contents/MacOS"
 
-cp "$GAME/libSDL2-2.0.0.dylib" \
-   "$GAME/libSDL2-2.0.0.dylib.backup"
+cp -n "$GAME/libSDL2-2.0.0.dylib" \
+  "$GAME/libSDL2-2.0.0.dylib.backup"
 
-cp build/libSDL2-2.0.dylib \
-   "$GAME/libSDL2-2.0.0.dylib"
+cp SDL/build/libSDL2-2.0.0.dylib \
+  "$GAME/libSDL2-2.0.0.dylib"
 ```
 
-Restart Steam and launch Stardew Valley.
+Connect both controllers, restart Steam, and launch Stardew Valley. Start local split-screen co-op and check that:
 
-Both controllers should now work simultaneously with correctly oriented analog sticks.
+- Each controller controls one separate character.
+- Moving either stick up or down produces the expected direction.
+- The LEDs indicate Player 1 and Player 2.
 
-## Optional: Persist the environment variable
+Steam updates or game-file verification may replace the patched library.
 
-The `launchctl setenv` command may not survive a logout or restart.
+## Restore the original library
 
-To restore the setting automatically at login, create:
-
-`~/Library/LaunchAgents/com.local.stardew-controller.plist`
-
-With the following contents:
-
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>Label</key>
-    <string>com.local.stardew-controller</string>
-    <key>ProgramArguments</key>
-    <array>
-        <string>/bin/launchctl</string>
-        <string>setenv</string>
-        <string>SDL_JOYSTICK_MFI</string>
-        <string>0</string>
-    </array>
-    <key>RunAtLoad</key>
-    <true/>
-</dict>
-</plist>
-```
-
-Then load it:
-
-```bash
-launchctl bootstrap "gui/$(id -u)" \
-  "$HOME/Library/LaunchAgents/com.local.stardew-controller.plist"
-```
-
-### How the LaunchAgent works
-
-The LaunchAgent runs `launchctl setenv SDL_JOYSTICK_MFI 0` once when you log in.
-
-- It does not install a driver or run continuously.
-- It does not require administrator privileges.
-- **Steam must launch after the LaunchAgent runs** to inherit the setting.
-- The LaunchAgent is optional. You can run the command manually instead.
-
-A ready-to-use configuration is included at
-[`launchagents/com.local.stardew-controller.plist`](launchagents/com.local.stardew-controller.plist).
-
-To install it, copy the file into `~/Library/LaunchAgents/` and load it
-using the `launchctl bootstrap` command shown above.
-
-## Reverting the changes
-
-Restore the original SDL2 library:
+Quit Steam and Stardew Valley. If you created the backup above:
 
 ```bash
 GAME="$HOME/Library/Application Support/Steam/steamapps/common/Stardew Valley/Contents/MacOS"
-
 cp "$GAME/libSDL2-2.0.0.dylib.backup" \
-   "$GAME/libSDL2-2.0.0.dylib"
+  "$GAME/libSDL2-2.0.0.dylib"
 ```
 
-To restore the default SDL controller backend:
+Alternatively, use **Steam → Stardew Valley → Properties → Installed Files → Verify integrity of game files** to restore the library distributed with the game.
 
-```bash
-launchctl unsetenv SDL_JOYSTICK_MFI
-```
+## How it works
 
-If you installed the optional LaunchAgent, unload and remove it first:
+The build disables Apple's GameController/MFi backend and retains SDL2's IOKit and HIDAPI controller drivers. The patch corrects vertical input for Microsoft wired Xbox 360 controllers (`045e:028e`) in both drivers:
 
-```bash
-launchctl bootout "gui/$(id -u)" \
-  "$HOME/Library/LaunchAgents/com.local.stardew-controller.plist"
+- **HIDAPI:** corrects the left and right sticks' Y-axis orientation on macOS.
+- **IOKit:** corrects the left-stick Y-axis when this driver handles input.
 
-rm "$HOME/Library/LaunchAgents/com.local.stardew-controller.plist"
-```
+The axis corrections are restricted to this vendor and product ID. Other controller models retain SDL2's existing axis behavior.
 
-## Technical explanation
+## Compatibility and limitations
 
-Apple's GameController framework appeared to consolidate two identical wired Xbox 360 controllers into one logical device.
+- Verified: two wired Microsoft Xbox 360 controllers (`045e:028e`), Apple Silicon Mac, Steam Stardew Valley, SDL2 2.30.4 built for `x86_64`.
+- Not verified: other controller models, SDL releases, games, or macOS versions.
+- This replaces a game-bundled dynamic library; keep a backup and expect Steam verification or updates to restore the original.
 
-Disabling SDL's MFi backend allowed its IOKit backend to recognize both independently.
+## Credits and licensing
 
-However, the IOKit backend reported the left stick's vertical axis in the opposite direction expected by Stardew Valley.
+**Thanks to [Tom Grimwood](https://github.com/TomGrimwood)** for his earlier Xbox 360 controller work in his [SDL fork](https://github.com/TomGrimwood/SDL). His Xbox 360 Y-axis work informed this project. The build instructions use the official SDL2 source. See Tom's repository for his implementation and any applicable attribution or licensing notices.
 
-The included patch modifies `SDL_iokitjoystick.c` and `SDL_iokitjoystick_c.h` to invert axis 1 only for wired Xbox 360 controllers (`045e:028e`).
-
-No third-party controller driver or changes to macOS security protections are required.
-
-## Compatibility
-
-Verified on:
-- Apple Silicon Mac
-- macOS 27
-- Two wired Xbox 360 controllers (`045e:028e`)
-- Stardew Valley using SDL2 (x86_64)
-
-Other macOS versions, games, and controller models have not been tested.
+[SDL2](https://github.com/libsdl-org/SDL) is developed by the SDL project and distributed under the zlib license. This project is not affiliated with SDL, Steam, or ConcernedApe.
